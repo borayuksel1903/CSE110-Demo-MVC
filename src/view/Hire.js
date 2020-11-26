@@ -1,32 +1,29 @@
-import React, {useState} from 'react';
-import {Form as TutorForm, Button} from 'react-bootstrap';
-import {useHistory} from 'react-router-dom';
+import React, { useState } from 'react';
+import { Form as TutorForm, Button } from 'react-bootstrap';
+import { useHistory } from 'react-router-dom';
+import db from '../db_config';
 
 export function HireTutor(props) {
     const history = useHistory();
-    const [name, setName] = useState("");
-    const [years, setYears] = useState("");
+    const [name, setName] = useState((props.tutor && props.tutor.name) || "");
+    const [years, setYears] = useState((props.tutor && props.tutor.years) || "");
     const {cseCourse} = props.location;    
 
+    /* CREATE */
+    const createTutor = (name, years, cseCourse) => {
+        var tutorData = {
+            name,
+            years
+        }
+        var tutorKey = db.ref('course').child(cseCourse).push().key;
+        var updates = {};
+        updates['/course/' + cseCourse + '/' + tutorKey] = tutorData;
+    
+        db.ref().update(updates);
+    }
+
     const handleClick = () => {
-        /* CONTROLLER CALL */
-
-        /* make a post request with the new tutor we are adding */
-        let config = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name,
-                years,
-                cseCourse
-            })
-        };
-
-        /* make the server call, which will make the database call to add the new tutor to the tutors list */
-        fetch('http://localhost:8000/tutor_list/add_tutor', config)
-        .catch(error => console.log(error));
-
-        /* END OF CONTROLLER CALL */
+        createTutor(name, years, cseCourse);
 
         /* reset name and years fields */
         setName("");
@@ -38,7 +35,6 @@ export function HireTutor(props) {
         localStorage.setItem('course', cseCourse);
         history.goBack();
     }
-
 
     return (
         <div className="container">
@@ -54,7 +50,7 @@ export function HireTutor(props) {
                         <TutorForm.Control value={years} placeholder="Years" type="number" onChange={(event) => setYears(event.target.value)} />
                     </TutorForm.Group>
                     <div>
-                        <Button variant="primary" onClick={handleClick}>
+                        <Button variant="primary" onClick={handleClick} className="hire-button">
                             Add Tutor!
                         </Button>
                     </div>

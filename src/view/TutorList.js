@@ -1,35 +1,56 @@
-import React, {useEffect, useState} from 'react';
-import {Button, Table, Form} from 'react-bootstrap';
-import {useHistory} from 'react-router-dom';
-import {BsPencil} from 'react-icons/bs';
+import React, { useEffect, useState } from 'react';
+import { Button, Form, Table } from 'react-bootstrap';
+import { BsPencil } from 'react-icons/bs';
+import { useHistory } from 'react-router-dom';
+import db from '../db_config';
 
 export function TutorList(props) {
     const history = useHistory();
     const courseNumber = localStorage.getItem('course')
-    const [tutors, setTutors] = useState([]);
-    const {cseCourse} = props.location;
+    const [tutors, setTutors] = useState(props.tutors || []);
+    const { cseCourse } = props.location;
     const [course] = useState(cseCourse || courseNumber);
     const [nameEdit, setNameEdit] = useState(-1);
     const [yearEdit, setYearEdit] = useState(-1);
+    
+    /* READ */
+    const getTutors = (cseCourse) => {
+        db.ref('course').child(cseCourse).once('value')
+        .then(snapshot => snapshot.val())
+        .then(tutorsSnapshot => {
+            let tutorList = [];
+
+            for(var tutor in tutorsSnapshot) {
+                tutorList.push({...tutorsSnapshot[tutor], key: tutor})
+            }
+
+            setTutors(tutorList);
+        })
+        .catch(error => console.log(error));
+    }
+
+    /* UPDATE */
+    const updateTutors = (tutors, cseCourse) => {
+        var updates = {};
+        tutors.forEach(tutor => {
+            updates['/course/' + cseCourse + '/' + tutor.key] = { name: tutor.name, years: tutor.years };
+        });
+    
+        db.ref().update(updates);
+    }
+
+    /* DELETE */
+    const deleteTutor = (tutor, cseCourse) => {
+        db.ref('course').child(cseCourse + '/' + tutor.key).remove();
+    }
 
     // retrieve Tutor list and store in the tutors array to display the tutors in a table
     useEffect(
         () => {
-            /* CONTROLLER CALL */
-
-            /* we are making a get request to a certain route */
-            let config = {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-            };
-
-            /* we are making a call to this route, we specified what kind of call (post / get) we are making */
-            fetch('http://localhost:8000/tutor_list?cseCourse=' + course, config)
-            .then(response => response.json())
-            .then(json => setTutors(json))
-            .catch(error => console.log(error));
+            if(!props.tutors) 
+                getTutors(course);
         },
-        [course]
+        [course, props.tutors]
     );
 
     // navigating to Hire Tutor page
@@ -48,21 +69,7 @@ export function TutorList(props) {
         tutorList.splice(tutorIndex, 1);
         setTutors(tutorList);
 
-        /* CONTROLLER CALL */
-
-        /* specify that we are making a post request, since we are updating the database */
-        let config = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                tutor,
-                cseCourse: course
-            })
-        };
-
-        /* make a post request to the server, which will make a database call to update the tutors array with the tutor we just removed */
-        fetch('http://localhost:8000/tutor_list/remove_tutor', config)
-        .catch(error => console.log(error));
+        deleteTutor(tutor, course);
     }
 
     /* goes back to the home page */
@@ -71,13 +78,13 @@ export function TutorList(props) {
     }
 
     /*  "handleXXXChange" is used to specify updates in the View, and 
-        "handleXXXUpdate" is used to specify updating the database */ 
+        "handleXXXUpdate" is used to specify updating the database */
 
     /* updates the name of a tutor on the tutor list, just on the view */
     const handleNameChange = (tutor, newName) => {
         const tutorIndex = tutors.findIndex(el => el === tutor);
         const tutorList = [...tutors];
-        tutorList[tutorIndex] = {...tutorList[tutorIndex], name: newName};
+        tutorList[tutorIndex] = { ...tutorList[tutorIndex], name: newName };
 
         setTutors(tutorList);
     }
@@ -86,7 +93,7 @@ export function TutorList(props) {
     const handleYearsChange = (tutor, newYears) => {
         const tutorIndex = tutors.findIndex(el => el === tutor);
         const tutorList = [...tutors];
-        tutorList[tutorIndex] = {...tutorList[tutorIndex], years: newYears};
+        tutorList[tutorIndex] = { ...tutorList[tutorIndex], years: newYears };
 
         setTutors(tutorList);
     }
@@ -94,21 +101,7 @@ export function TutorList(props) {
     /*  updates the tutor list with the updated names/years on the database.
         Synchronize the view with the database */
     const handleTutorUpdate = () => {
-        /* CONTROLLER CALL */
-
-        /* make a post request to server to update the tutors */
-        let config = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                tutors,
-                cseCourse: course
-            })
-        };
-
-        /* make the server call with the new tutor list we have, which will update the database with the new names / years */
-        fetch('http://localhost:8000/tutor_list/update_tutor', config)
-        .catch(error => console.log(error));
+        updateTutors(tutors, course);
     }
 
     /* render the html, show view to the user */
@@ -116,7 +109,7 @@ export function TutorList(props) {
         <div className="container">
             <header className="App-header">
                 <h1>Tutor List for CSE {course}</h1>
-                <Table striped bordered hover variant="dark" className="table">
+                <Table striped bordered hover variant="dark" className="table tutors-table">
                     <thead>
                         <tr >
                             <th className="table-row">Name</th>
@@ -125,21 +118,21 @@ export function TutorList(props) {
                         </tr>
                     </thead>
                     <tbody>
-                        {tutors.map((tutor, key) => (
-                            <tr key={key}>
-                                <td><BsPencil onClick={() => setNameEdit(key)} /> { nameEdit === key ?
-                                    ( <div><Form.Control value={tutor.name} onChange={(event) => handleNameChange(tutor, event.target.value)} />
-                                    <Button variant="info" onClick={() => {setNameEdit(-1); handleTutorUpdate();}}>Save</Button></div>)
-                                    : ( tutor.name )
+                        {tutors && tutors.map((tutor, key) => (
+                            <tr key={key} className="tutors-table-row">
+                                <td><BsPencil className="edit-tutor-button" onClick={() => setNameEdit(key)} /> {nameEdit === key ?
+                                    (<div><Form.Control value={tutor.name} onChange={(event) => handleNameChange(tutor, event.target.value)} />
+                                        <Button variant="info" className="save-button" onClick={() => { setNameEdit(-1); handleTutorUpdate(); }}>Save</Button></div>)
+                                    : (tutor.name)
                                 }
                                 </td>
-                                <td><BsPencil onClick={() => setYearEdit(key)} /> { yearEdit === key ?
-                                    ( <div><Form.Control value={tutor.years} onChange={(event) => handleYearsChange(tutor, event.target.value)} />
-                                    <Button variant="info" onClick={() => {setYearEdit(-1); handleTutorUpdate();}}>Save</Button></div>)
-                                    : ( tutor.years )
+                                <td><BsPencil onClick={() => setYearEdit(key)} /> {yearEdit === key ?
+                                    (<div><Form.Control value={tutor.years} onChange={(event) => handleYearsChange(tutor, event.target.value)} />
+                                        <Button variant="info" onClick={() => { setYearEdit(-1); handleTutorUpdate(); }}>Save</Button></div>)
+                                    : (tutor.years)
                                 }
                                 </td>
-                                <td><Button variant="danger" className="btn-danger" onClick={() => handleFire(tutor)}>Fire</Button></td>
+                                <td><Button variant="danger" className="btn-danger fire-button" onClick={() => handleFire(tutor)}>Fire</Button></td>
                             </tr>
                         ))}
                     </tbody>
@@ -154,7 +147,6 @@ export function TutorList(props) {
                         Home Page
                     </Button>
                 </div>
-
             </header>
         </div>
     );
